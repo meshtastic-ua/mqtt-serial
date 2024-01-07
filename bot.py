@@ -25,6 +25,8 @@ class MQTTSerialBot:
 
     def __init__(self, port=None):
         self.exit = False
+        # MQTT client
+        self.client = None
         self.config = configparser.RawConfigParser()
         if os.path.exists('config.ini'):
             self.config.read('config.ini')
@@ -51,7 +53,8 @@ class MQTTSerialBot:
             return
 
         message = decoded.get('payload').decode()
-        print(message)
+        #print(message)
+        self.send_message(message)
 
     @property
     def generate_message_id(self):
@@ -60,7 +63,7 @@ class MQTTSerialBot:
             return message_id
         return self.generate_message_id()
 
-    def send_message(self, text, client, destinationId=BROADCAST_ADDR):
+    def send_message(self, text, destinationId=BROADCAST_ADDR):
         # Create first message without from
         m = mqtt_pb2.ServiceEnvelope()
         m.channel_id = self.channel
@@ -84,7 +87,7 @@ class MQTTSerialBot:
         new_msg = mqtt_pb2.ServiceEnvelope()
         msX = json_format.ParseDict(full, new_msg)
 
-        result = client.publish(f'msh/2/c/{self.channel}/{self.my_id_hex}', msX.SerializeToString())
+        result = self.client.publish(f'msh/2/c/{self.channel}/{self.my_id_hex}', msX.SerializeToString())
         print(result)
 
     def onConnection(self, interface, topic=pub.AUTO_TOPIC):
@@ -143,21 +146,21 @@ class MQTTSerialBot:
         self.interface.sendText(result)
 
     def run_mqtt(self):
-        client = mqtt.Client()
-        client.on_connect = self.on_mqtt_connect
-        client.on_message = self.on_mqtt_message
+        self.client = mqtt.Client()
+        self.client.on_connect = self.on_mqtt_connect
+        self.client.on_message = self.on_mqtt_message
 
-        client.username_pw_set(self.config['MQTT']['username'], self.config['MQTT']['password'])
+        self.client.username_pw_set(self.config['MQTT']['username'], self.config['MQTT']['password'])
 
         while not self.exit:
             try:
-                client.connect(self.config['MQTT']['broker'], int(self.config['MQTT']['port']), 60)
+                self.client.connect(self.config['MQTT']['broker'], int(self.config['MQTT']['port']), 60)
             except socket.timeout:
                 print('Connect timeout...')
                 time.sleep(10)
 
             try:
-                client.loop_forever()
+                self.client.loop_forever()
             except TimeoutError:
                 print('Loop timeout...')
                 time.sleep(10)
