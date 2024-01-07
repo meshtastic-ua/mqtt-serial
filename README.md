@@ -5,6 +5,8 @@ MQTT to serial bridge
 
 - `pip install pipenv`
 
+- `git clone https://github.com/meshtastic-ua/mqtt-serial; cd mqtt-serial`
+
 - `pipenv install`
 
 - `cp config.ini.example config.ini`
