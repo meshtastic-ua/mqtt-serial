@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 meshtastic = "*"
 paho-mqtt = "*"
+setproctitle = "*"
 
 [dev-packages]
 

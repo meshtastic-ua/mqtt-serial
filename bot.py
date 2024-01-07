@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 
 import configparser
+import logging
 import os
 import random
 import socket
 import time
 
-from threading import Thread
+from typing import Any
+
+from threading import RLock, Thread
 
 import google.protobuf.json_format as json_format
 import paho.mqtt.client as mqtt
@@ -18,12 +21,127 @@ from meshtastic import serial_interface as serial
 
 from pubsub import pub
 
+# pylint:disable=no-name-in-module
+from setproctitle import setthreadtitle
+
+
+def setup_logger(name=__name__, level=logging.INFO) -> logging.Logger:
+    """
+    Set up logger and return usable instance
+
+    :param name:
+    :param level:
+
+    :return:
+    """
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+
+    # create console handler and set level to debug
+    handler = logging.StreamHandler()
+    handler.setLevel(level)
+
+    with open('VERSION', 'r', encoding='utf-8') as fh:
+        VERSION = fh.read().rstrip('\n')
+    LOGFORMAT = '%(asctime)s - %(name)s/v{} - %(levelname)s file:%(filename)s %(funcName)s line:%(lineno)s %(message)s'
+    LOGFORMAT = LOGFORMAT.format(VERSION)
+
+    # create formatter
+    formatter = logging.Formatter(LOGFORMAT)
+
+    # add formatter to ch
+    handler.setFormatter(formatter)
+
+    # add ch to logger
+    logger.addHandler(handler)
+    return logger
+
+
+class Memcache:
+    """
+    Memcache - in-memory cache for storing data
+    """
+    name = 'Memcache.Reaper'
+
+    def __init__(self, logger):
+        self.lock = RLock()
+        self.logger = logger
+        self.cache = {}
+
+    def get(self, key) -> Any:
+        """
+        get - get data by key
+
+        :param key:
+        :return:
+        """
+        value = self.get_ex(key)
+        return value.get('data') if value else None
+
+    def get_ex(self, key) -> Any:
+        """
+        get_ex - get data by key with expiration
+
+        :param key:
+        :return:
+        """
+        with self.lock:
+            return self.cache.get(key)
+
+    def set(self, key, value, expires=0) -> None:
+        """
+        set - set data by key
+
+        :param key:
+        :param value:
+        :param expires:
+        :return:
+        """
+        with self.lock:
+            if expires > 0:
+                expires = time.time() + expires
+            self.cache[key] = {'data': value, 'expires': expires}
+
+    def delete(self, key) -> None:
+        """
+        delete - delete data by key
+
+        :param key:
+        :return:
+        """
+        with self.lock:
+            del self.cache[key]
+
+    def reaper(self) -> None:
+        """
+        reaper - reaper thread
+
+        :return:
+        """
+        setthreadtitle(self.name)
+        while True:
+            time.sleep(0.1)
+            for key in list(self.cache):
+                expires = self.get_ex(key).get('expires')
+                if time.time() > expires > 0:
+                    self.logger.warning(f'Removing key {key}...')
+                    self.delete(key)
+
+    def run_noblock(self) -> None:
+        """
+        run_noblock - run reaper thread
+
+        :return:
+        """
+        locker = Thread(target=self.reaper, daemon=True, name=self.name)
+        locker.start()
+
 
 class MQTTSerialBot:
     MessageMap = {}
     TOPICLIST = []
 
-    def __init__(self, port=None):
+    def __init__(self, logger, memcache):
         self.exit = False
         # MQTT client
         self.client = None
@@ -35,6 +153,8 @@ class MQTTSerialBot:
         devPath = self.config['Meshtastic']['port']
         if devPath == 'auto':
             devPath = None
+        self.logger = logger
+        self.memcache = memcache
         self.interface = serial.SerialInterface(devPath)
         self.channel = self.config['MQTT']['channel']
 
@@ -53,7 +173,7 @@ class MQTTSerialBot:
             return
 
         message = decoded.get('payload').decode()
-        #print(message)
+        self.logger.info(f'Radio to MQTT: {message}')
         self.send_message(message)
 
     @property
@@ -88,34 +208,34 @@ class MQTTSerialBot:
         msX = json_format.ParseDict(full, new_msg)
 
         result = self.client.publish(f'msh/2/c/{self.channel}/{self.my_id_hex}', msX.SerializeToString())
-        print(result)
+        self.logger.info(f'MQTT send_message: {result}')
 
     def onConnection(self, interface, topic=pub.AUTO_TOPIC):
-        print('Connected to device')
+        self.logger.info('Connected to device')
 
     def run_mesh(self):
         pub.subscribe(self.onReceive, "meshtastic.receive")
         pub.subscribe(self.onConnection, "meshtastic.connection.established")
         while not self.exit:
             time.sleep(1)
-        print('Mesh exiting...')
+        self.logger.info('Mesh exiting...')
 
 
     def on_mqtt_connect(self, client, userdata, flags, rc):
-        print("Connected with result code "+str(rc))
+        self.logger.info(f"Connected with result code {str(rc)}")
         client.subscribe(f'msh/2/c/{self.channel}/#')
 
 
     def on_mqtt_message(self, client, userdata, msg):
         topic = msg.topic.split('/')[3]
         if not topic in self.TOPICLIST and topic != self.channel:
-            print(f'Unauthorized topic: {topic}')
+            self.logger.info(f'Unauthorized topic: {topic}')
             self.TOPICLIST.append(topic)
 
         try:
                 m = mqtt_pb2.ServiceEnvelope().FromString(msg.payload)
         except Exception as exc:
-            print(str(msg.payload))
+            self.logger.error(str(msg.payload))
             return
 
         portnum = m.packet.decoded.portnum
@@ -142,7 +262,7 @@ class MQTTSerialBot:
             result = ': '.join(f_split[1:])
 
         nodeId = hex(nodeInt).replace('0x', '!')
-        print(f'{nodeId}: {m.packet.id} {result}')
+        self.logger.info(f'MQTT to Radio: {nodeId}: {m.packet.id} {result}')
         self.interface.sendText(result)
 
     def run_mqtt(self):
@@ -156,15 +276,15 @@ class MQTTSerialBot:
             try:
                 self.client.connect(self.config['MQTT']['broker'], int(self.config['MQTT']['port']), 60)
             except socket.timeout:
-                print('Connect timeout...')
+                self.logger.error('Connect timeout...')
                 time.sleep(10)
 
             try:
                 self.client.loop_forever()
             except TimeoutError:
-                print('Loop timeout...')
+                self.logger.error('Loop timeout...')
                 time.sleep(10)
-        print('MQTT exiting...')
+        self.logger.error('MQTT exiting...')
 
     def run(self):
         mesh_thread = Thread(target=self.run_mesh)
@@ -175,11 +295,12 @@ class MQTTSerialBot:
             try:
                 time.sleep(1)
             except KeyboardInterrupt:
-                print('Exit requested...')
+                self.logger.error('Exit requested...')
                 self.exit = True
 
 
-
 if __name__ == '__main__':
-    bot = MQTTSerialBot()
+    logger = setup_logger(name='bot.py')
+    memcache = Memcache(logger)
+    bot = MQTTSerialBot(logger, memcache)
     bot.run()
