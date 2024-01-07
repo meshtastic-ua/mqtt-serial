@@ -1,0 +1,10 @@
+[Meshtastic]
+# auto or /dev/ttySomething0
+port = auto
+
+[MQTT]
+channel = LongFast
+username = meshdev
+password = large4cats
+broker = mqtt.meshtastic.org
+port = 1883

@@ -1,11 +1,15 @@
 # mqtt-serial
 MQTT to serial bridge
 
-## Installing dependencies (needs to be done once)
+## Dependencies and configuration (needs to be done once)
 
-`pip install pipenv`
+- `pip install pipenv`
 
-`pipenv install`
+- `pipenv install`
+
+- `cp config.ini.example config.ini`
+
+- Edit `config.ini`
 
 ## Run
 
