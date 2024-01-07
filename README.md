@@ -1,6 +1,8 @@
 # mqtt-serial
 MQTT to serial bridge
 
+WARNING: this is PoC without loop detection yet
+
 ## Dependencies and configuration (needs to be done once)
 
 - `pip install pipenv`
