@@ -173,6 +173,10 @@ class MQTTSerialBot:
             return
 
         message = decoded.get('payload').decode()
+
+        if self.filter_message(node_id, packet.get('id'), message):
+            return
+
         self.logger.info(f'Radio to MQTT: {message}')
         self.send_message(message)
 
@@ -221,6 +225,17 @@ class MQTTSerialBot:
         self.logger.info('Mesh exiting...')
 
 
+    def filter_message(self, node_id, packet_id, message):
+        # Filter by message ID
+        if self.memcache.get(f'{node_id}_{packet_id}'):
+            return True
+        self.memcache.set(f'{node_id}_{packet_id}', True, expires=300)
+        # Filter by message contents
+        if self.memcache.get(f'{node_id}_{message}'):
+            return True
+        self.memcache.set(f'{node_id}_{message}', True, expires=300)
+        return False
+
     def on_mqtt_connect(self, client, userdata, flags, rc):
         self.logger.info(f"Connected with result code {str(rc)}")
         client.subscribe(f'msh/2/c/{self.channel}/#')
@@ -228,12 +243,12 @@ class MQTTSerialBot:
 
     def on_mqtt_message(self, client, userdata, msg):
         topic = msg.topic.split('/')[3]
-        if not topic in self.TOPICLIST and topic != self.channel:
+        if topic not in self.TOPICLIST and topic != self.channel:
             self.logger.info(f'Unauthorized topic: {topic}')
             self.TOPICLIST.append(topic)
 
         try:
-                m = mqtt_pb2.ServiceEnvelope().FromString(msg.payload)
+            m = mqtt_pb2.ServiceEnvelope().FromString(msg.payload)
         except Exception as exc:
             self.logger.error(str(msg.payload))
             return
@@ -248,20 +263,14 @@ class MQTTSerialBot:
         if nodeInt == self.my_id_int:
             return
 
-        # check message id
-        if self.MessageMap.get(m.packet.id):
+        nodeId = hex(nodeInt).replace('0x', '!')
+        if self.filter_message(nodeId, m.packet.id, m.packet.decoded.payload.decode()):
             return
-        self.MessageMap[m.packet.id] = True
 
         full_msg = m.packet.decoded.payload.decode()
         f_split = full_msg.split(': ')
-        result = ''
-        if len(f_split) == 1:
-            result = f_split[0]
-        else:
-            result = ': '.join(f_split[1:])
-
-        nodeId = hex(nodeInt).replace('0x', '!')
+        result = f_split[0] if len(f_split) == 1 else ': '.join(f_split[1:])
+        #
         self.logger.info(f'MQTT to Radio: {nodeId}: {m.packet.id} {result}')
         self.interface.sendText(result)
 
@@ -302,5 +311,6 @@ class MQTTSerialBot:
 if __name__ == '__main__':
     logger = setup_logger(name='bot.py')
     memcache = Memcache(logger)
+    memcache.run_noblock()
     bot = MQTTSerialBot(logger, memcache)
     bot.run()
