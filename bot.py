@@ -169,7 +169,7 @@ class MQTTSerialBot:
     def onReceive(self, packet, interface):
         decoded = packet.get('decoded')
         node_id = packet.get('fromId')
-        if decoded.get('portnum') != 'TEXT_MESSAGE_APP' or node_id == self.my_id:
+        if decoded.get('portnum') != 'TEXT_MESSAGE_APP' or node_id == self.my_id_hex:
             return
 
         message = decoded.get('payload').decode()
