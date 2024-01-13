@@ -173,11 +173,12 @@ class MQTTSerialBot:
             return
 
         message = decoded.get('payload').decode()
+        message = f'{node_id}: {message}'
 
         if self.filter_message(node_id, packet.get('id'), message):
             return
 
-        self.logger.info(f'Radio to MQTT: {message}')
+        self.logger.info(f'Radio to MQTT: `{message}`')
         self.send_message(message)
 
     @property
@@ -271,7 +272,9 @@ class MQTTSerialBot:
         f_split = full_msg.split(': ')
         result = f_split[0] if len(f_split) == 1 else ': '.join(f_split[1:])
         #
-        self.logger.info(f'MQTT to Radio: {nodeId}: {m.packet.id} {result}')
+        result = f'{nodeId}: {result}'
+        #
+        self.logger.info(f'MQTT to Radio: {nodeId}: {m.packet.id} `{result}`')
         self.interface.sendText(result)
 
     def run_mqtt(self):
