@@ -237,17 +237,17 @@ class MQTTSerialBot:
                 return
             time.sleep(0.1)
         # Send message
-        self.memcache.set(full_msg, "sent", expires=300)
+        self.memcache.set(full_msg, "sent", expires=600)
         self.logger.info(f'Wait and send: `{full_msg}`')
         send_fn(full_msg)
 
     def filter_message(self, node_id, message):
         full_msg = f'{node_id}: {message}'
         if not self.memcache.get(full_msg):
-            self.memcache.set(full_msg, "waiting", expires=300)
+            self.memcache.set(full_msg, "waiting", expires=600)
         elif self.memcache.get(full_msg) == "waiting":
             self.logger.info(f'Already waiting for `{full_msg}`')
-            self.memcache.set(full_msg, "sent", expires=300)
+            self.memcache.set(full_msg, "sent", expires=600)
             return True
         return False
 
