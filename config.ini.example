@@ -1,5 +1,5 @@
 [General]
-wait_before_send = 5
+wait_before_send = 10
 
 [Meshtastic]
 # auto or /dev/ttySomething0

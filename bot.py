@@ -238,11 +238,12 @@ class MQTTSerialBot:
         send_fn(full_msg)
 
     def filter_message(self, node_id, message):
-        if not self.memcache.get(f'{node_id}_{message}'):
-            self.memcache.set(f'{node_id}_{message}', "waiting", expires=300)
-        elif self.memcache.get(f'{node_id}_{message}') == "waiting":
-            self.logger.info(f'Already waiting for `{node_id} {message}`')
-            self.memcache.set(f'{node_id}_{message}', "sent", expires=300)
+        full_msg = f'{node_id}: {message}'
+        if not self.memcache.get(full_msg):
+            self.memcache.set(full_msg, "waiting", expires=300)
+        elif self.memcache.get(full_msg) == "waiting":
+            self.logger.info(f'Already waiting for `{full_msg}`')
+            self.memcache.set(full_msg, "sent", expires=300)
             return True
         return False
 
@@ -259,7 +260,7 @@ class MQTTSerialBot:
         try:
             m = mqtt_pb2.ServiceEnvelope().FromString(msg.payload)
         except Exception as exc:
-            self.logger.error(str(msg.payload))
+            self.logger.error("Error %s occurred while parsing message: ", exc, str(msg.payload))
             return
 
         portnum = m.packet.decoded.portnum
