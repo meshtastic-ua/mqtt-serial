@@ -175,7 +175,9 @@ class MQTTSerialBot:
         if decoded.get('portnum') != 'TEXT_MESSAGE_APP' or node_id == self.my_id_hex:
             return
 
-        message = decoded.get('payload').decode()
+        f_split = decoded.get('payload').decode().split(': ')
+        message = f_split[0] if len(f_split) == 1 else ': '.join(f_split[1:])
+
         if self.filter_message(node_id, message):
             return
 
