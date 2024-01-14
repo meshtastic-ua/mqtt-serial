@@ -138,7 +138,6 @@ class Memcache:
 
 
 class MQTTSerialBot:
-    MessageMap = {}
     TOPICLIST = []
 
     def __init__(self, logger, memcache):
@@ -173,18 +172,17 @@ class MQTTSerialBot:
             return
 
         message = decoded.get('payload').decode()
-        message = f'{node_id}: {message}'
-
-        if self.filter_message(node_id, packet.get('id'), message):
+        if self.filter_message(node_id, message):
             return
 
-        self.logger.info(f'Radio to MQTT: `{message}`')
-        self.send_message(message)
+        self.logger.info(f'Radio to MQTT: f`{node_id}: {message}`')
+        Thread(target=self.wait_and_send, args=(node_id, message, self.send_message), name=f"Radio_{node_id}").start()
 
     @property
     def generate_message_id(self):
         message_id = random.randint(0, 100000)
-        if not self.MessageMap.get(message_id):
+        if not self.memcache.get(message_id):
+            self.memcache.set(message_id, True, expires=3600)
             return message_id
         return self.generate_message_id()
 
@@ -225,22 +223,32 @@ class MQTTSerialBot:
             time.sleep(1)
         self.logger.info('Mesh exiting...')
 
+    def wait_and_send(self, node_id, message, send_fn):
+        # Wait for message to be sent
+        full_msg = f'{node_id}: {message}'
+        for _ in range(0, self.config['General'].getint('wait_before_send') * 10):
+            if self.exit:
+                return
+            if self.memcache.get(full_msg) == "sent":
+                return
+            time.sleep(0.1)
+        # Send message
+        self.memcache.set(full_msg, "sent", expires=300)
+        self.logger.info(f'Wait and send: `{full_msg}`')
+        send_fn(full_msg)
 
-    def filter_message(self, node_id, packet_id, message):
-        # Filter by message ID
-        if self.memcache.get(f'{node_id}_{packet_id}'):
+    def filter_message(self, node_id, message):
+        if not self.memcache.get(f'{node_id}_{message}'):
+            self.memcache.set(f'{node_id}_{message}', "waiting", expires=300)
+        elif self.memcache.get(f'{node_id}_{message}') == "waiting":
+            self.logger.info(f'Already waiting for `{node_id} {message}`')
+            self.memcache.set(f'{node_id}_{message}', "sent", expires=300)
             return True
-        self.memcache.set(f'{node_id}_{packet_id}', True, expires=300)
-        # Filter by message contents
-        if self.memcache.get(f'{node_id}_{message}'):
-            return True
-        self.memcache.set(f'{node_id}_{message}', True, expires=300)
         return False
 
     def on_mqtt_connect(self, client, userdata, flags, rc):
         self.logger.info(f"Connected with result code {str(rc)}")
         client.subscribe(f'msh/2/c/{self.channel}/#')
-
 
     def on_mqtt_message(self, client, userdata, msg):
         topic = msg.topic.split('/')[3]
@@ -264,18 +272,15 @@ class MQTTSerialBot:
         if nodeInt == self.my_id_int:
             return
 
-        nodeId = hex(nodeInt).replace('0x', '!')
-        if self.filter_message(nodeId, m.packet.id, m.packet.decoded.payload.decode()):
-            return
+        node_id = hex(nodeInt).replace('0x', '!')
+        f_split = m.packet.decoded.payload.decode().split(': ')
+        message = f_split[0] if len(f_split) == 1 else ': '.join(f_split[1:])
+        #
+        if self.filter_message(node_id, message):
+             return
 
-        full_msg = m.packet.decoded.payload.decode()
-        f_split = full_msg.split(': ')
-        result = f_split[0] if len(f_split) == 1 else ': '.join(f_split[1:])
-        #
-        result = f'{nodeId}: {result}'
-        #
-        self.logger.info(f'MQTT to Radio: {nodeId}: {m.packet.id} `{result}`')
-        self.interface.sendText(result)
+        self.logger.info(f'MQTT to Radio: `{node_id}: {message}`')
+        Thread(target=self.wait_and_send, args=(node_id, message, self.interface.sendText), name=f"MQTT_{node_id}").start()
 
     def run_mqtt(self):
         self.client = mqtt.Client()

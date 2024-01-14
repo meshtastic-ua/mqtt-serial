@@ -1,3 +1,6 @@
+[General]
+wait_before_send = 5
+
 [Meshtastic]
 # auto or /dev/ttySomething0
 port = auto
