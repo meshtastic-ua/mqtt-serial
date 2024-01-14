@@ -257,7 +257,6 @@ class MQTTSerialBot:
             self.memcache.set(full_msg, "sent", expires=600)
             return True
         elif self.memcache.get(full_msg) == "sent":
-            self.logger.info(f'Already sent `{full_msg}`')
             return True
         return False
 
