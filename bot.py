@@ -249,6 +249,9 @@ class MQTTSerialBot:
             self.logger.info(f'Already waiting for `{full_msg}`')
             self.memcache.set(full_msg, "sent", expires=600)
             return True
+        elif self.memcache.get(full_msg) == "sent":
+            self.logger.info(f'Already sent `{full_msg}`')
+            return True
         return False
 
     def on_mqtt_connect(self, client, userdata, flags, rc):
