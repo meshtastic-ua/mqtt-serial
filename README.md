@@ -1,7 +1,8 @@
 # mqtt-serial
 MQTT to serial bridge
 
-WARNING: this is PoC without loop detection yet
+Bridge waits for the first 5 minutes before sending any messages.
+
 
 ## Dependencies and configuration (needs to be done once)
 

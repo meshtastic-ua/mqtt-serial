@@ -156,6 +156,8 @@ class MQTTSerialBot:
         self.memcache = memcache
         self.interface = serial.SerialInterface(devPath)
         self.channel = self.config['MQTT']['channel']
+        # Slow start
+        self.slow_start = True
 
     @property
     def my_id_hex(self):
@@ -232,7 +234,7 @@ class MQTTSerialBot:
     def wait_and_send(self, node_id, message, send_fn):
         # Wait for message to be sent
         full_msg = f'{node_id}: {message}'
-        for _ in range(0, self.config['General'].getint('wait_before_send') * 10):
+        for _ in range(self.config['General'].getint('wait_before_send') * 10):
             if self.exit:
                 return
             if self.memcache.get(full_msg) == "sent":
@@ -240,6 +242,9 @@ class MQTTSerialBot:
             time.sleep(0.1)
         # Send message
         self.memcache.set(full_msg, "sent", expires=600)
+        if self.slow_start:
+            self.logger.info(f'Slow start active, messages will not be sent: `{full_msg}`')
+            return
         self.logger.info(f'Wait and send: `{full_msg}`')
         send_fn(full_msg)
 
@@ -313,11 +318,17 @@ class MQTTSerialBot:
                 time.sleep(10)
         self.logger.error('MQTT exiting...')
 
+    def disable_slow_start(self):
+        time.sleep(300)
+        self.slow_start = False
+
     def run(self):
         mesh_thread = Thread(target=self.run_mesh)
         mesh_thread.start()
         mqtt_thread = Thread(target=self.run_mqtt)
         mqtt_thread.start()
+        # Disable slow start after 5 minutes
+        Thread(target=self.disable_slow_start, daemon=True).start()
         while not self.exit:
             try:
                 time.sleep(1)
