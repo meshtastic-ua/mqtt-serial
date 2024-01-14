@@ -320,6 +320,7 @@ class MQTTSerialBot:
     def disable_slow_start(self):
         time.sleep(300)
         self.slow_start = False
+        self.logger.info('Slow start disabled...')
 
     def run(self):
         mesh_thread = Thread(target=self.run_mesh)
