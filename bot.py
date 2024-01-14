@@ -168,6 +168,10 @@ class MQTTSerialBot:
     def onReceive(self, packet, interface):
         decoded = packet.get('decoded')
         node_id = packet.get('fromId')
+        # skip packets without node_id
+        if node_id is None:
+            return
+        # skip packets from us
         if decoded.get('portnum') != 'TEXT_MESSAGE_APP' or node_id == self.my_id_hex:
             return
 
