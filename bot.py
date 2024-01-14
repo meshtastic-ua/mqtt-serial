@@ -184,7 +184,7 @@ class MQTTSerialBot:
         if not self.memcache.get(message_id):
             self.memcache.set(message_id, True, expires=3600)
             return message_id
-        return self.generate_message_id()
+        return self.generate_message_id
 
     def send_message(self, text, destinationId=BROADCAST_ADDR):
         # Create first message without from
