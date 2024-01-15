@@ -2,7 +2,7 @@
 wait_before_send = 10
 
 [Meshtastic]
-# auto or /dev/ttySomething0
+# auto or /dev/ttySomething0 or tcp:192.168.0.1
 port = auto
 
 [MQTT]

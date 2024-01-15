@@ -17,7 +17,7 @@ import paho.mqtt.client as mqtt
 from meshtastic import BROADCAST_ADDR, BROADCAST_NUM
 from meshtastic import mqtt_pb2 as mqtt_pb2
 from meshtastic import portnums_pb2 as PortNum
-from meshtastic import serial_interface as serial
+from meshtastic import serial_interface as serial, tcp_interface as tcp
 
 from pubsub import pub
 
@@ -149,12 +149,17 @@ class MQTTSerialBot:
             self.config.read('config.ini')
         else:
             raise RuntimeError('Config file could not be found...')
+
         devPath = self.config['Meshtastic']['port']
         if devPath == 'auto':
-            devPath = None
+            self.interface = serial.SerialInterface()
+        elif devPath.startswith('/dev/'):
+            self.interface = serial.SerialInterface(devPath)
+        else:
+            self.interface = tcp.TCPInterface(hostname=devPath.lstrip('tcp:'))
+
         self.logger = logger
         self.memcache = memcache
-        self.interface = serial.SerialInterface(devPath)
         self.channel = self.config['MQTT']['channel']
         # Slow start
         self.slow_start = True
@@ -201,7 +206,7 @@ class MQTTSerialBot:
         m.gateway_id = self.my_id_hex
         m.packet.to = int(BROADCAST_NUM) if destinationId == BROADCAST_ADDR else int(destinationId.replace('!', '0x'))
         m.packet.hop_limit = 3
-        m.packet.id = self.generate_message_id()
+        m.packet.id = self.generate_message_id
         m.packet.rx_time = int(time.time())
         m.packet.decoded.portnum = PortNum.TEXT_MESSAGE_APP
         m.packet.decoded.payload = bytes(text, 'utf-8')
