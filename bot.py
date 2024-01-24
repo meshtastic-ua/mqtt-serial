@@ -278,7 +278,7 @@ class MQTTSerialBot:
         try:
             m = mqtt_pb2.ServiceEnvelope().FromString(msg.payload)
         except Exception as exc:
-            self.logger.error("Error %s occurred while parsing message: ", exc, str(msg.payload))
+            self.logger.error("Error %s occurred while parsing message: %s", exc, str(msg.payload))
             return
 
         portnum = m.packet.decoded.portnum
