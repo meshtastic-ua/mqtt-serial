@@ -1,5 +1,5 @@
 # mqtt-serial
-MQTT to serial bridge
+Meshtastic MQTT to serial bridge
 
 Bridge waits for the first 5 minutes before sending any messages.
 
